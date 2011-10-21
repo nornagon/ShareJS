@@ -9,6 +9,7 @@ Doc = (data) ->
   @submitOp = (op) ->
     @snapshot = json.apply @snapshot, op
     @emit 'change', op
+    @emit 'remoteop', op
   @_register()
 Doc.prototype = json.api
 MicroEvent.mixin Doc
@@ -95,7 +96,7 @@ module.exports =
       assert.equal num, 4
       assert.equal pos, 0
       test.done()
-    doc.emit 'remoteop', [{p:['list',0],li:4}], doc.get()
+    doc.submitOp [{p:['list',0],li:4}], doc.get()
   'object replace listener': (test) ->
     doc = new Doc {foo:'bar'}
     doc.at().on 'replace', (pos, before, after) ->
@@ -103,7 +104,7 @@ module.exports =
       assert.equal after, 'baz'
       assert.equal pos, 'foo'
       test.done()
-    doc.emit 'remoteop', [{p:['foo'],od:'bar',oi:'baz'}]
+    doc.submitOp [{p:['foo'],od:'bar',oi:'baz'}]
   'list replace listener': (test) ->
     doc = new Doc ['bar']
     doc.at().on 'replace', (pos, before, after) ->
@@ -111,7 +112,7 @@ module.exports =
       assert.equal after, 'baz'
       assert.equal pos, 0
       test.done()
-    doc.emit 'remoteop', [{p:[0],ld:'bar',li:'baz'}]
+    doc.submitOp [{p:[0],ld:'bar',li:'baz'}]
 
   'listener moves on li': (test) ->
     doc = new Doc ['bar']
@@ -120,7 +121,7 @@ module.exports =
       assert.equal i, 0
       test.done()
     doc.at().insert 0, 'asdf'
-    doc.emit 'remoteop', [{p:[1,0], si:'foo'}]
+    doc.submitOp [{p:[1,0], si:'foo'}]
 
   'listener moves on ld': (test) ->
     doc = new Doc ['asdf','bar']
@@ -129,7 +130,7 @@ module.exports =
       assert.equal i, 0
       test.done()
     doc.at(0).remove()
-    doc.emit 'remoteop', [{p:[0,0], si:'foo'}]
+    doc.submitOp [{p:[0,0], si:'foo'}]
 
   'listener moves on lm': (test) ->
     doc = new Doc ['asdf','bar']
@@ -138,21 +139,21 @@ module.exports =
       assert.equal i, 0
       test.done()
     doc.at().move(0,1)
-    doc.emit 'remoteop', [{p:[0,0], si:'foo'}]
+    doc.submitOp [{p:[0,0], si:'foo'}]
 
   'listener drops on ld': (test) ->
     doc = new Doc [1]
     doc.at(0).on 'add', (x) ->
       assert.ok false
     doc.at(0).set 3
-    doc.emit 'remoteop', [{p:[0], na:1}]
+    doc.submitOp [{p:[0], na:1}]
     test.done()
   'listener drops on od': (test) ->
     doc = new Doc {foo:'bar'}
     doc.at('foo').on 'text-insert', (text, pos) ->
       assert.ok false
     doc.at('foo').set('baz')
-    doc.emit 'remoteop', [{p:['foo',0], si:'asdf'}]
+    doc.submitOp [{p:['foo',0], si:'asdf'}]
     test.done()
 
   'child op one level': (test) ->
@@ -161,7 +162,7 @@ module.exports =
       assert.deepEqual p, ['foo',0]
       assert.equal op.si, 'baz'
       test.done()
-    doc.emit 'remoteop', [{p:['foo',0], si:'baz'}]
+    doc.submitOp [{p:['foo',0], si:'baz'}]
 
   'child op two levels': (test) ->
     doc = new Doc {foo:['bar']}
@@ -169,7 +170,7 @@ module.exports =
       assert.deepEqual p, ['foo',0,3]
       assert.deepEqual op.si, 'baz'
       test.done()
-    doc.emit 'remoteop', [{p:['foo',0,3],si:'baz'}]
+    doc.submitOp [{p:['foo',0,3],si:'baz'}]
 
   'child op path snipping': (test) ->
     doc = new Doc {foo:['bar']}
@@ -177,7 +178,7 @@ module.exports =
       assert.deepEqual p, [0,3]
       assert.deepEqual op.si, 'baz'
       test.done()
-    doc.emit 'remoteop', [{p:['foo',0,3],si:'baz'}]
+    doc.submitOp [{p:['foo',0,3],si:'baz'}]
 
   'child op not sent when op outside node': (test) ->
     doc = new Doc {foo:['bar']}
