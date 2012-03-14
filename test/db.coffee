@@ -1,191 +1,259 @@
 # Tests for the databases. This code is tested with all the database implementations.
 
-testCase = require('nodeunit').testCase
+{testCase} = require 'nodeunit'
 
 createDb = require '../src/server/db'
-helpers = require './helpers'
-makePassPart = helpers.makePassPart
+{makePassPart} = require './helpers'
 types = require '../src/types'
 
 newDocName = do ->
-	num = 0
-	-> "doc#{num++}"
+  num = 0
+  -> "__testing_doc#{num++}"
 
-test = (opts) -> testCase
-	setUp: (callback) ->
-		@name = newDocName()
-		@db = createDb opts
-		callback()
+test = (Db, options) -> testCase
+  setUp: (callback) ->
+    @name = newDocName()
+    @db = new Db options
+    @db.delete @name, null, =>
+      callback()
 
-	tearDown: (callback) ->
-		@db.delete @name
-		@db.close()
-		callback()
+  tearDown: (callback) ->
+    @db.delete @name, null, =>
+      @db.close()
+      callback()
 
-	'create evaluates true when a document is called, false when it already exists': (test) ->
-		data = {snapshot:null, type:'simple', meta:{}, v:0}
-		@db.create @name, data, (result, error) =>
-			test.strictEqual result, true
-			test.strictEqual error, undefined
-			@db.create @name, data, (result, error) ->
-				test.strictEqual result, false
-				test.strictEqual error, 'Document already exists'
-				test.done()
+  'create doesnt send an error when a document is created': (test) ->
+    @db.create @name, {snapshot:null, type:'simple', meta:{}, v:0}, (error) ->
+      test.equal error, null
+      test.done()
 
-	'getSnapshot returns null for a nonexistant doc': (test) ->
-		@db.getSnapshot @name, (data, error) ->
-			test.deepEqual data, null
-			test.deepEqual error, 'Document does not exist'
-			test.done()
-	
-	'getSnapshot has the type, version and snapshot set when a doc is created': (test) ->
-		data = {snapshot:{str:'hi'}, type:'simple', meta:{}, v:0}
-		@db.create @name, data, (result) =>
-			@db.getSnapshot @name, (dataout) ->
-				test.deepEqual data, dataout
-				test.done()
-	
-	'getVersion returns null for a nonexistant doc': (test) ->
-		@db.getVersion @name, (v) ->
-			test.deepEqual v, null
-			test.done()
-	
-	"getVersion returns a document's version": (test) ->
-		data = {snapshot:{str:'hi'}, type:'simple', meta:{}, v:0}
-		@db.create @name, data, (result) =>
-			@db.getVersion @name, (v) =>
-				test.deepEqual v, 0
-				@db.append @name, {op:{}, v:0}, {snapshot:{str:'yo'}, v:1, meta:{}, type:'simple'}, =>
-					@db.getVersion @name, (v) ->
-						test.deepEqual v, 1
-						test.done()
+  'create sends an error if the document already exists': (test) ->
+    data = {snapshot:null, type:'simple', meta:{}, v:0}
+    @db.create @name, data, (error) =>
+      @db.create @name, data, (error) ->
+        test.strictEqual error, 'Document already exists'
+        test.done()
 
-	'append appends to the DB': (test) ->
-		passPart = makePassPart test, 3
+  'Calling create multiple times only results in one successful create': (test) ->
+    # So.. It looks like there's a bug in couchdb where before this document is deleted
+    # from a previous test run, if you run the tests again you can make create() work twice.
+    #
+    # In that case, the second create() succeeds.
+    #
+    # There's not much I can do about it except hope that people give the database a few seconds
+    # after calling delete before recreating the document (and have only one person create a document
+    # at a time).
+    @name += '_' + Math.floor(Math.random() * 10000)
+    passPart = makePassPart test, 20
 
-		@db.create @name, {snapshot:{str:'hi'}, type:'simple', meta:{}, v:0}, =>
-			@db.append @name,
-				{op:{position:0, str:'hi'}, v:0, meta:{}},
-				{snapshot:'hi', type:'text', v:1, meta:{}}, =>
-					@db.getOps @name, 0, 1, (ops) ->
-						test.deepEqual ops, [{op:{position:0, str:'hi'}, meta:{}, v:0}]
-						passPart()
-					@db.getSnapshot @name, (data) ->
-						test.deepEqual data, {v:1, snapshot:'hi', type:'text', meta:{}}
-						passPart()
-					@db.getVersion @name, (v) ->
-						test.strictEqual v, 1
-						passPart()
-	
-	'snapshot is updated when a second op is applied': (test) ->
-		passPart = makePassPart test, 2
+    created = false
+    callback = (error) ->
+      if error
+        test.strictEqual error, 'Document already exists'
+      else
+        if created
+          throw new Error 'Document successfully created multiple times!'
+        else
+          created = true
 
-		@db.create @name, {snapshot:'', type:'text', meta:{}, v:0}, =>
-			@db.append @name,
-				{op:[{p:0, i:'hi'}], v:0, meta:{}},
-				{snapshot:'hi', type:'text', v:1, meta:{}}, =>
-					@db.append @name,
-						{op:[{i:'yo ', p:0}], v:1, meta:{}},
-						{snapshot:'yo hi', type:'text', v:2, meta:{}}, =>
-							@db.getSnapshot @name, (data) ->
-								test.deepEqual data, {v:2, snapshot:'yo hi', type:'text', meta:{}}
-								passPart()
-							@db.getVersion @name, (v) ->
-								test.strictEqual v, 2
-								passPart()
+      passPart()
 
-	'delete a non-existant document passes false to its callback': (test) ->
-		@db.delete @name, (success, error) ->
-			test.strictEqual success, false
-			test.strictEqual error, 'Document does not exist'
-			test.done()
+    @db.create @name, {snapshot:null, type:'simple', meta:{i}, v:0}, callback for i in [1..20]
 
-	'delete deletes a document': (test) ->
-		passPart = makePassPart test, 4
+  'getSnapshot sends an error for a nonexistant doc': (test) ->
+    @db.getSnapshot @name, (error, data) ->
+      test.deepEqual error, 'Document does not exist'
+      test.equal data, null
+      test.done()
+  
+  'getSnapshot has the type, version and snapshot set when a doc is created': (test) ->
+    @db.create @name, {snapshot:{str:'hi'}, type:'simple', meta:{}, v:0}, (error) =>
+      test.equal error, null
+      @db.getSnapshot @name, (error, data) ->
+        test.equal error, null
+        test.deepEqual {snapshot:{str:'hi'}, type:'simple', meta:{}, v:0}, data
+        test.done()
+  
+  "getSnapshot is updated after calling writeSnapshot()": (test) ->
+    @db.create @name, {snapshot:{str:'hi'}, type:'simple', meta:{}, v:0}, (error, dbMeta) =>
+      test.equal error, null
+      @db.writeSnapshot @name, {snapshot:{str:'yo'}, v:1, meta:{}, type:'simple'}, null, (error) =>
+        test.equal error, null
+        @db.getSnapshot @name, (error, data, dbMeta) ->
+          test.equal error, null
+          test.deepEqual data, {snapshot:{str:'yo'}, v:1, meta:{}, type:'simple'}
+          test.done()
 
-		@db.create @name, {snapshot:'', v:0, type:'text', meta:{}}, =>
-			@db.append @name,
-				{op:[{i:'hi', p:0}], v:0, meta:{}},
-				{snapshot:'hi', type:'text', v:1}, =>
-					@db.delete @name, (success, error) =>
-						test.strictEqual success, true
-						test.strictEqual error, undefined
-						@db.getVersion @name, (v) ->
-							test.strictEqual v, null
-							passPart()
-						@db.getSnapshot @name, (data) ->
-							test.deepEqual data, null
-							passPart()
-						@db.getOps @name, 0, null, (ops) ->
-							test.deepEqual ops, []
-							passPart()
-						@db.delete @name, (success) =>
-							test.strictEqual success, false
-							passPart()
-	
-	'delete with no callback doesnt crash': (test) ->
-		@db.delete @name
-		@db.create @name, {snapshot:'', v:0, type:'text', meta:{}}, =>
-			@db.delete @name
-			test.done()
+  "getSnapshot is updated after calling writeSnapshot() with dbMeta": (test) ->
+    @db.create @name, {snapshot:{str:'hi'}, type:'simple', meta:{}, v:0}, (error, dbMeta) =>
+      test.equal error, null
+      @db.writeSnapshot @name, {snapshot:{str:'yo'}, v:1, meta:{}, type:'simple'}, dbMeta, (error, dbMeta) =>
+        test.equal error, null
+        @db.getSnapshot @name, (error, data, dbMeta) ->
+          test.equal error, null
+          test.deepEqual data, {snapshot:{str:'yo'}, v:1, meta:{}, type:'simple'}
+          test.done()
 
-	'getOps returns [] for a nonexistant document, with any arguments': (test) ->
-		passPart = makePassPart test, 7
-		check = (ops) ->
-			test.deepEqual ops, []
-			passPart()
+  "getSnapshot returns dbMeta through the callback": (test) ->
+    @db.create @name, {snapshot:{str:'hi'}, type:'simple', meta:{}, v:0}, (error, dbMeta) =>
+      test.equal error, null
+      @db.getSnapshot @name, (error, data, dbMeta) =>
+        test.equal error, null
+        @db.writeSnapshot @name, {snapshot:{str:'yo'}, v:1, meta:{}, type:'simple'}, dbMeta, (error, dbMeta) =>
+          test.equal error, null
+          @db.getSnapshot @name, (error, data, dbMeta) ->
+            test.equal error, null
+            test.deepEqual data, {snapshot:{str:'yo'}, v:1, meta:{}, type:'simple'}
+            test.done()
 
-		@db.getOps @name, 0, 0, check
-		@db.getOps @name, 0, 1, check
-		@db.getOps @name, 0, 10, check
-		@db.getOps @name, 0, null, check
-		@db.getOps @name, 10, 10, check
-		@db.getOps @name, 10, 11, check
-		@db.getOps @name, 10, null, check
+  'writeOp writes ops to the DB': (test) ->
+    @db.create @name, {snapshot:{str:'hi'}, type:'simple', meta:{}, v:0}, (error) =>
+      test.equal error, null
+      @db.writeOp @name, {op:{position:0, str:'hi'}, v:0, meta:{}}, (error) =>
+        test.equal error, null
+        @db.getOps @name, 0, 1, (error, ops) ->
+          test.equal error, null
+          test.deepEqual ops, [{op:{position:0, str:'hi'}, meta:{}}]
+          test.done()
+  
+  'snapshot is updated when a second op is applied': (test) ->
+    @db.create @name, {snapshot:'', type:'text', meta:{}, v:0}, =>
+      @db.writeSnapshot @name, {snapshot:'hi', type:'text', v:1, meta:{}}, null, =>
+        @db.writeSnapshot @name, {snapshot:'yo hi', type:'text', v:2, meta:{}}, null, =>
+          @db.getSnapshot @name, (error, data) ->
+            test.deepEqual data, {v:2, snapshot:'yo hi', type:'text', meta:{}}
+            test.done()
 
-	'getOps returns [] for a new document, with any arguments': (test) ->
-		passPart = makePassPart test, 7
-		check = (ops) ->
-			test.deepEqual ops, []
-			passPart()
+  'delete a non-existant document sends an error to its callback': (test) ->
+    @db.delete @name, null, (error) ->
+      test.strictEqual error, 'Document does not exist'
+      test.done()
 
-		@db.create @name, {snapshot:null, type:'simple', meta:{}, v:0}, (status) =>
-			test.strictEqual status, true
-			@db.getOps @name, 0, 0, check
-			@db.getOps @name, 0, 1, check
-			@db.getOps @name, 0, 10, check
-			@db.getOps @name, 0, null, check
-			@db.getOps @name, 10, 10, check
-			@db.getOps @name, 10, 11, check
-			@db.getOps @name, 10, null, check
+  'delete deletes a document': (test) ->
+    passPart = makePassPart test, 3
 
-	'getOps returns ops': (test) ->
-		passPart = makePassPart test, 5
+    @db.create @name, {snapshot:'', v:0, type:'text', meta:{}}, =>
+      @db.writeOp @name, {op:[{i:'hi', p:0}], v:0, meta:{}}, =>
+        @db.writeSnapshot @name, {snapshot:'hi', type:'text', v:1, meta:{}}, null, =>
+          @db.delete @name, null, (error) =>
+            test.equal error, null
 
-		@db.create @name, {snapshot:null, type:'text', meta:{}, v:0}, (status) =>
-			@db.append @name, {op:[{p:0,i:'hi'}], v:0, meta:{}}, {snapshot:'hi', type:'text', v:1}, =>
-				@db.getOps @name, 0, 0, (ops) ->
-					test.deepEqual ops, []
-					passPart()
-				@db.getOps @name, 0, 1, (ops) ->
-					test.deepEqual ops, [{op:[{p:0,i:'hi'}], meta:{}, v:0}]
-					passPart()
-				@db.getOps @name, 0, null, (ops) ->
-					test.deepEqual ops, [{op:[{p:0,i:'hi'}], meta:{}, v:0}]
-					passPart()
-				@db.getOps @name, 1, 1, (ops) ->
-					test.deepEqual ops, []
-					passPart()
-				@db.getOps @name, 1, null, (ops) ->
-					test.deepEqual ops, []
-					passPart()
+            @db.getSnapshot @name, (error, data) ->
+              test.strictEqual error, 'Document does not exist'
+              test.equal data, null
+              passPart()
+            @db.getOps @name, 0, null, (error, ops) ->
+              test.deepEqual ops, []
+              passPart()
+            @db.delete @name, null, (error) =>
+              test.strictEqual error, 'Document does not exist'
+              passPart()
+ 
+  'delete with dbMeta set still works': (test) ->
+    passPart = makePassPart test, 3
 
-exports.memory = test {type: 'memory', 'testing': true}
+    @db.create @name, {snapshot:'', v:0, type:'text', meta:{}}, (error, dbMeta) =>
+      @db.writeOp @name, {op:[{i:'hi', p:0}], v:0, meta:{}}, =>
+        @db.writeSnapshot @name, {snapshot:'hi', type:'text', v:1, meta:{}}, dbMeta, (error, dbMeta) =>
+          @db.delete @name, dbMeta, (error) =>
+            test.equal error, null
+
+            @db.getSnapshot @name, (error, data) ->
+              test.strictEqual error, 'Document does not exist'
+              test.equal data, null
+              passPart()
+            @db.getOps @name, 0, null, (error, ops) ->
+              test.deepEqual ops, []
+              passPart()
+            @db.delete @name, null, (error) =>
+              test.strictEqual error, 'Document does not exist'
+              passPart()
+  
+  'Calling delete multiple times only results in one successful delete': (test) ->
+    passPart = makePassPart test, 20
+
+    @db.create @name, {snapshot:'', v:0, type:'text', meta:{}}, =>
+      deleted = false
+      callback = (error) ->
+        if error
+          test.strictEqual 'Document does not exist', error
+        else
+          if deleted
+            throw new Error 'Document successfully deleted multiple times!'
+          else
+            deleted = true
+
+        passPart()
+
+      # you can use the proper syntax once coffeescript >1.1.2 lands.
+      @db.delete @name, null, callback for __ignored in [1..20]
+
+  'delete with no callback doesnt crash': (test) ->
+    @db.delete @name
+    @db.create @name, {snapshot:'', v:0, type:'text', meta:{}}, =>
+      @db.delete @name
+      test.done()
+
+  'getOps returns [] for a nonexistant document, with any arguments': (test) ->
+    passPart = makePassPart test, 7
+    check = (error, ops) ->
+      # Either you get back [] or you get an error.
+      if error != 'Document does not exist'
+        test.deepEqual ops, []
+      passPart()
+
+    @db.getOps @name, 0, 0, check
+    @db.getOps @name, 0, 1, check
+    @db.getOps @name, 0, 10, check
+    @db.getOps @name, 0, null, check
+    @db.getOps @name, 10, 10, check
+    @db.getOps @name, 10, 11, check
+    @db.getOps @name, 10, null, check
+
+  'getOps returns [] for a new document, with any arguments': (test) ->
+    passPart = makePassPart test, 7
+    check = (error, ops) ->
+      test.deepEqual ops, []
+      passPart()
+
+    @db.create @name, {snapshot:null, type:'simple', meta:{}, v:0}, (error) =>
+      test.equal error, null
+      @db.getOps @name, 0, 0, check
+      @db.getOps @name, 0, 1, check
+      @db.getOps @name, 0, 10, check
+      @db.getOps @name, 0, null, check
+      @db.getOps @name, 10, 10, check
+      @db.getOps @name, 10, 11, check
+      @db.getOps @name, 10, null, check
+
+  'getOps returns ops': (test) ->
+    passPart = makePassPart test, 5
+
+    @db.create @name, {snapshot:null, type:'text', meta:{}, v:0}, (error) =>
+      @db.writeOp @name, {op:[{p:0,i:'hi'}], v:0, meta:{}}, =>
+        @db.getOps @name, 0, 0, (error, ops) ->
+          test.deepEqual ops, []
+          passPart()
+        @db.getOps @name, 0, 1, (error, ops) ->
+          test.deepEqual ops, [{op:[{p:0,i:'hi'}], meta:{}}]
+          passPart()
+        @db.getOps @name, 0, null, (error, ops) ->
+          test.deepEqual ops, [{op:[{p:0,i:'hi'}], meta:{}}]
+          passPart()
+        @db.getOps @name, 1, 1, (error, ops) ->
+          test.deepEqual ops, []
+          passPart()
+        @db.getOps @name, 1, null, (error, ops) ->
+          test.deepEqual ops, []
+          passPart()
 
 options = require '../bin/options'
-exports.couchdb = test {type: 'couchdb', 'testing': true} if options.db.type == 'couchdb'
+exports.couchdb = test require('../src/server/db/couchdb') if options.db.type == 'couchdb'
 
 try
-	require 'redis'
-	exports.redis = test {type: 'redis', 'testing': true}
+  require 'redis'
+  exports.redis = test require('../src/server/db/redis')
 
+try
+if options.db.type == 'pg'
+  exports.pg = test require('../src/server/db/pg'), options.db

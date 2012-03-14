@@ -58,7 +58,7 @@
 			}
 		</style>
 		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js"></script>
-		<script src="/socket.io/socket.io.js"></script>
+    <script src="/channel/bcsocket.js"></script>
 		<script src="/share/share.js"></script>
 		<script src="/share/json.js"></script>
 	</head>
@@ -550,7 +550,7 @@
 			}
 			var docname = 'hex:' + document.location.hash.slice(1)
 
-			sharejs.open(docname, 'json', function (doc, error) {
+			sharejs.open(docname, 'json', function(error, doc) {
 				$state = doc;
 				doc.on('change', function (op) {
 					stateUpdated(op)

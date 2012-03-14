@@ -10,16 +10,16 @@
 			<div id='text' class='content'></div>
 		</div>
 
-		<script src="/socket.io/socket.io.js"></script>
+    <script src="/channel/bcsocket.js"></script>
 		<script src="/share/share.js"></script>
 
 		<script>
 var elem = document.getElementById('text');
 
-sharejs.open('hello', 'text', function(doc, error) {
-	elem.innerHTML = doc.snapshot;
+sharejs.open('hello', 'text', function(error, doc) {
+	elem.innerText = doc.snapshot;
 	doc.on('change', function() {
-		elem.innerHTML = doc.snapshot;
+		elem.innerText = doc.snapshot;
 	});
 });
 		</script>

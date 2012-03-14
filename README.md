@@ -125,14 +125,14 @@ First, get an ace editor on your page:
 Your web app will need access to the following JS files:
 
 - Ace (http://ace.ajax.org/)
-- SocketIO (http://socket.io/).
+- Browserchannel
 - ShareJS client and ace bindings.
 
 Add these script tags:
 
 ```html
 <script src="http://ajaxorg.github.com/ace/build/src/ace.js"></script>
-<script src="/socket.io/socket.io.js"></script>
+<script src="/channel/bcsocket.js"></script>
 <script src="/share/share.js"></script>
 <script src="/share/ace.js"></script>
 ```
@@ -143,11 +143,13 @@ And add this code:
 <script>
     var editor = ace.edit("editor");
 
-    sharejs.open('hello', 'text', function(doc, error) {
+    sharejs.open('hello', 'text', function(error, doc) {
         doc.attach_ace(editor);
     });
 </script>
 ```
+
+> **NOTE:** If you're using the current version in npm (0.4) or earler, the argument order is the other way around (`function(doc, error)`).
 
 Thats about it :)
 
@@ -170,7 +172,7 @@ Run this from a couple terminal windows when sharejs is running to see it go.
 var client = require('share').client;
 
 // Open the 'hello' document, which should have type 'text':
-client.open('hello', 'text', 'http://localhost:8000/sjs', function(doc, error) {
+client.open('hello', 'text', 'http://localhost:8000/sjs', function(error, doc) {
     // Insert some text at the start of the document (position 0):
     doc.insert("Hi there!\n", 0);
 
@@ -185,6 +187,8 @@ client.open('hello', 'text', 'http://localhost:8000/sjs', function(doc, error) {
     // doc.close();
 });
 ```
+
+> **NOTE:** If you're using the current version in npm (0.4) or earler, the argument order is the other way around (`function(doc, error)`).
 
 See [`the wiki`](https://github.com/josephg/ShareJS/wiki) for API documentation, and `examples/node*` for some more example apps.
 

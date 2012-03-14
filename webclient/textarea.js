@@ -1,10 +1,9 @@
 (function() {
   var applyChange;
+
   applyChange = function(doc, oldval, newval) {
     var commonEnd, commonStart;
-    if (oldval === newval) {
-      return;
-    }
+    if (oldval === newval) return;
     commonStart = 0;
     while (oldval.charAt(commonStart) === newval.charAt(commonStart)) {
       commonStart++;
@@ -14,39 +13,39 @@
       commonEnd++;
     }
     if (oldval.length !== commonStart + commonEnd) {
-      doc.del(oldval.length - commonStart - commonEnd, commonStart);
+      doc.del(commonStart, oldval.length - commonStart - commonEnd);
     }
     if (newval.length !== commonStart + commonEnd) {
-      return doc.insert(newval.slice(commonStart, newval.length - commonEnd), commonStart);
+      return doc.insert(commonStart, newval.slice(commonStart, (newval.length - commonEnd)));
     }
   };
-  window.sharejs.Doc.prototype.attach_textarea = function(elem) {
+
+  window.sharejs.extendDoc('attach_textarea', function(elem) {
     var doc, event, genOp, prevvalue, replaceText, _i, _len, _ref, _results;
     doc = this;
-    elem.value = this.snapshot;
+    elem.value = this.getText();
     prevvalue = elem.value;
     replaceText = function(newText, transformCursor) {
       var newSelection, scrollTop;
       newSelection = [transformCursor(elem.selectionStart), transformCursor(elem.selectionEnd)];
       scrollTop = elem.scrollTop;
       elem.value = newText;
-      if (elem.scrollTop !== scrollTop) {
-        elem.scrollTop = scrollTop;
-      }
+      if (elem.scrollTop !== scrollTop) elem.scrollTop = scrollTop;
       return elem.selectionStart = newSelection[0], elem.selectionEnd = newSelection[1], newSelection;
     };
-    this.on('insert', function(text, pos) {
+    this.on('insert', function(pos, text) {
       var transformCursor;
       transformCursor = function(cursor) {
-        if (pos <= cursor) {
+        if (pos < cursor) {
           return cursor + text.length;
         } else {
           return cursor;
         }
       };
-      return replaceText(elem.value.slice(0, pos) + text + elem.value.slice(pos), transformCursor);
+      prevvalue = elem.value.replace(/\r\n/g, '\n');
+      return replaceText(prevvalue.slice(0, pos) + text + prevvalue.slice(pos), transformCursor);
     });
-    this.on('delete', function(text, pos) {
+    this.on('delete', function(pos, text) {
       var transformCursor;
       transformCursor = function(cursor) {
         if (pos < cursor) {
@@ -55,7 +54,8 @@
           return cursor;
         }
       };
-      return replaceText(elem.value.slice(0, pos) + elem.value.slice(pos + text.length), transformCursor);
+      prevvalue = elem.value.replace(/\r\n/g, '\n');
+      return replaceText(prevvalue.slice(0, pos) + prevvalue.slice(pos + text.length), transformCursor);
     });
     genOp = function(event) {
       var onNextTick;
@@ -73,8 +73,13 @@
     _results = [];
     for (_i = 0, _len = _ref.length; _i < _len; _i++) {
       event = _ref[_i];
-      _results.push(elem.addEventListener ? elem.addEventListener(event, genOp, false) : elem.attachEvent('on' + event, genOp));
+      if (elem.addEventListener) {
+        _results.push(elem.addEventListener(event, genOp, false));
+      } else {
+        _results.push(elem.attachEvent('on' + event, genOp));
+      }
     }
     return _results;
-  };
+  });
+
 }).call(this);

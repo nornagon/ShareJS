@@ -15,14 +15,14 @@
 		<div id="editor"></div>
 
 		<script src="/lib/ace/ace.js" type="text/javascript" charset="utf-8"></script>
-		<script src="/socket.io/socket.io.js"></script>
+    <script src="/channel/bcsocket.js"></script>
 		<script src="/share/share.js"></script>
 		<script src="/share/ace.js"></script>
 
 		<script>
 var editor = ace.edit("editor");
 
-sharejs.open('hello', 'text', function(doc, error) {
+sharejs.open('hello', 'text', function(error, doc) {
 	doc.attach_ace(editor);
 });
 		</script>
